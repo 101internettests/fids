@@ -20,7 +20,7 @@ python -m venv .venv
 
 Настройка
 1) Создайте `.env` на основе `.env.example` и заполните `FEEDS` — список URL через запятую.
-2) При желании укажите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID`. Отключить отправку в Telegram можно через `TELEGRAM_ENABLED=false`. При необходимости укажите путь для сохранения текста fids_stat в файл: `FIDS_STAT_PATH`.
+2) При желании укажите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID`. Отключить отправку в Telegram можно через `TELEGRAM_ENABLED=false`. Отдельно можно отключить отправку успешных сообщений (`fids_stat` за запуск) через `TELEGRAM_ENABLED_SU=false`. При необходимости укажите путь для сохранения текста fids_stat в файл: `FIDS_STAT_PATH`.
 
 Запуск
 - Прогон (например, из Jenkins job):

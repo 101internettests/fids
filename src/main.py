@@ -148,6 +148,21 @@ def main() -> None:
     with stats_path.open('w', encoding='utf-8') as f:
         json_dump(stats, f, ensure_ascii=False)
 
+    # Отправляем позитивное сообщение по итогам текущего прогона
+    run_text = format_summary(
+        total_feeds,
+        feeds_with_errors,
+        total_offers,
+        offers_with_errors,
+        total_issues,
+        None,
+        settings.timezone,
+    )
+    print(run_text)
+    append_log(log_path, run_text)
+    if settings.telegram_enabled and settings.telegram_enabled_success:
+        send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, run_text)
+
 
 
 if __name__ == '__main__':

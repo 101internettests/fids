@@ -22,6 +22,7 @@ class Settings:
     telegram_bot_token: Optional[str]
     telegram_chat_id: Optional[str]
     telegram_enabled: bool
+    telegram_enabled_success: bool
     fids_stat_path: Optional[str]
 
 
@@ -47,6 +48,7 @@ def load_settings() -> Settings:
     tg_token = os.getenv('TELEGRAM_BOT_TOKEN') or os.getenv('BOT_TOKEN')
     tg_chat = os.getenv('TELEGRAM_CHAT_ID') or os.getenv('CHAT_ID')
     telegram_enabled = (os.getenv('TELEGRAM_ENABLED', 'true').lower() in ['1', 'true', 'yes', 'y', 'on'])
+    telegram_enabled_success = (os.getenv('TELEGRAM_ENABLED_SU', 'true').lower() in ['1', 'true', 'yes', 'y', 'on'])
     fids_stat_path = os.getenv('FIDS_STAT_PATH')
 
     return Settings(
@@ -59,6 +61,7 @@ def load_settings() -> Settings:
         telegram_bot_token=tg_token,
         telegram_chat_id=tg_chat,
         telegram_enabled=telegram_enabled,
+        telegram_enabled_success=telegram_enabled_success,
         fids_stat_path=fids_stat_path,
     )
 
