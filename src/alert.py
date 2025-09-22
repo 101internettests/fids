@@ -50,8 +50,6 @@ def format_summary(total_feeds: int, bad_feeds: int, total_offers: int, bad_offe
         f'🌍 Проверено фидов: {total_feeds}',
         f'❌ Фидов с ошибками: {bad_feeds}',
     ]
-    if log_url:
-        parts.append(f'🔍 Лог: {log_url}')
     return '\n'.join(parts)
 
 
@@ -66,11 +64,14 @@ def send_telegram(token: Optional[str], chat_id: Optional[str], text: str) -> No
     if not token or not chat_id:
         return
     try:
-        requests.post(
+        resp = requests.post(
             f'https://api.telegram.org/bot{token}/sendMessage',
             json={'chat_id': chat_id, 'text': text},
             timeout=10,
         )
+        # Best-effort: print non-200 for easier debugging
+        if getattr(resp, 'status_code', 200) >= 400:
+            print(f'[telegram] sendMessage failed: {resp.status_code} {getattr(resp, "text", "")}')
     except Exception:
         # Network errors are swallowed; logs on disk retain message
         pass

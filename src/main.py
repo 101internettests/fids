@@ -51,8 +51,9 @@ def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) 
         text = format_negative(alert, settings.timezone)
         print(text)
         append_log(log_path, text)
-        send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
-        return True, 0
+        if settings.telegram_enabled:
+            send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
+        return True, 0, 0, 0
 
     has_error = False
     offers_checked = 0
@@ -83,7 +84,8 @@ def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) 
                 text = format_negative(alert, settings.timezone)
                 print(text)
                 append_log(log_path, text)
-                send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
+                if settings.telegram_enabled:
+                    send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
                 has_error = True
 
     return has_error, offers_checked, offers_with_errors, total_issues
