@@ -4,7 +4,9 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
+import time
 import requests
+from lxml import etree
 
 
 @dataclass
@@ -15,13 +17,20 @@ class FetchResult:
     error: Optional[str]
 
 
-def fetch_url(url: str, timeout_seconds: int, user_agent: str) -> FetchResult:
+def fetch_url(url: str, timeout_seconds: int, user_agent: str, connect_timeout: Optional[int] = None, read_timeout: Optional[int] = None, retries: int = 1) -> FetchResult:
     headers = {"User-Agent": user_agent}
-    try:
-        resp = requests.get(url, headers=headers, timeout=timeout_seconds)
-        return FetchResult(url=url, status_code=resp.status_code, content=resp.content, error=None)
-    except Exception as exc:  # noqa: BLE001 - surface network errors
-        return FetchResult(url=url, status_code=0, content=None, error=str(exc))
+    connect = connect_timeout or timeout_seconds
+    read = read_timeout or timeout_seconds
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            resp = requests.get(url, headers=headers, timeout=(connect, read))
+            return FetchResult(url=url, status_code=resp.status_code, content=resp.content, error=None)
+        except Exception as exc:  # noqa: BLE001
+            if attempt > max(1, retries):
+                return FetchResult(url=url, status_code=0, content=None, error=str(exc))
+            time.sleep(min(2 ** (attempt - 1), 4))
 
 
 def extract_domain(url: str) -> Optional[str]:
@@ -29,9 +38,20 @@ def extract_domain(url: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def is_same_domain(url: str, domain: str) -> bool:
-    other = extract_domain(url or '') or ''
-    return other.lower() == domain.lower()
+def _normalize_host(host: str) -> str:
+    h = (host or '').lower().strip()
+    if h.startswith('www.'):
+        h = h[4:]
+    return h
+
+
+def is_same_domain(url: str, domain: str, allow_subdomains: bool = False) -> bool:
+    other = _normalize_host(extract_domain(url or '') or '')
+    base = _normalize_host(domain or '')
+    if not allow_subdomains:
+        return other == base
+    # allow foo.base
+    return other == base or other.endswith('.' + base)
 
 
 def extract_origin(url: str) -> Optional[str]:
@@ -40,20 +60,33 @@ def extract_origin(url: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-XML_LINK_RE = re.compile(r"<url>\s*([^<\s]+)\s*</url>", re.IGNORECASE)
-
-
 def extract_subfeed_links(feed_xml_bytes: bytes, parent_feed_url: str) -> List[str]:
-    # Extract <url>...</url> links. Limit to same-domain XMLs.
-    text = feed_xml_bytes.decode('utf-8', errors='ignore')
-    candidates = [m.group(1).strip() for m in XML_LINK_RE.finditer(text)]
+    # Parse XML and select url-like nodes ending with .xml within same domain
+    parser = etree.XMLParser(recover=True, remove_comments=True)
+    try:
+        root = etree.fromstring(feed_xml_bytes, parser=parser)
+    except Exception:
+        return []
     parent_domain = extract_domain(parent_feed_url) or ''
+    candidates: List[str] = []
+    # Collect text of <url> elements
+    for el in root.xpath('//*[local-name()="url"]'):
+        t = (el.text or '').strip()
+        if t:
+            candidates.append(t)
+    # Also consider <link> elements
+    for el in root.xpath('//*[local-name()="link"]'):
+        t = (el.text or '').strip()
+        if t:
+            candidates.append(t)
     subfeeds: List[str] = []
     for link in candidates:
-        if not link.lower().endswith('.xml'):
+        low = link.lower()
+        if not low.endswith('.xml'):
             continue
         if is_same_domain(link, parent_domain):
             subfeeds.append(link)
+    # de-duplicate
     return list(dict.fromkeys(subfeeds))
 
 

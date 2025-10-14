@@ -25,6 +25,7 @@ class Settings:
     telegram_enabled_success: bool
     fids_stat_path: Optional[str]
     probe_origin_enabled: bool
+    allow_subdomains: bool
 
 
 def _split_csv(value: Optional[str]) -> List[str]:
@@ -61,6 +62,7 @@ def load_settings() -> Settings:
     telegram_enabled_success = (os.getenv('TELEGRAM_ENABLED_SU', 'true').lower() in ['1', 'true', 'yes', 'y', 'on'])
     fids_stat_path = os.getenv('FIDS_STAT_PATH')
     probe_origin_enabled = (os.getenv('ORIGIN_PROBE_ENABLED', 'false').lower() in ['1', 'true', 'yes', 'y', 'on'])
+    allow_subdomains = (os.getenv('ALLOW_SUBDOMAINS', 'false').lower() in ['1', 'true', 'yes', 'y', 'on'])
 
     return Settings(
         owners=owners,
@@ -75,6 +77,7 @@ def load_settings() -> Settings:
         telegram_enabled_success=telegram_enabled_success,
         fids_stat_path=fids_stat_path,
         probe_origin_enabled=probe_origin_enabled,
+        allow_subdomains=allow_subdomains,
     )
 
 
