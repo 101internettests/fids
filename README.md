@@ -19,8 +19,9 @@ python -m venv .venv
 ```
 
 Настройка
-1) Создайте `.env` на основе `.env.example` и заполните `FEEDS` — список URL через запятую.
-2) При желании укажите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID`. Отключить отправку в Telegram можно через `TELEGRAM_ENABLED=false`. Отдельно можно отключить отправку успешных сообщений (`fids_stat` за запуск) через `TELEGRAM_ENABLED_SU=false`. При необходимости укажите путь для сохранения текста fids_stat в файл: `FIDS_STAT_PATH`.
+1) Создайте `.env` на основе `.env.example` и заполните переменные владельцев: `ANTON_FEEDS`, `ILYA_FEEDS`, `YURA_FEEDS` — каждая это CSV‑список фидов данного владельца.
+2) При желании укажите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID`. Отключить отправку в Telegram можно через `TELEGRAM_ENABLED=false`. Отдельно можно отключить отправку успешных сообщений (`fids_stat` за запуск) через `TELEGRAM_ENABLED_SU=false`. При необходимости укажите путь для хранения суточной статистики: `FIDS_STAT_PATH`.
+3) Для ускорения старта можно отключить проверку доступности домена (по умолчанию выключена). Включить можно флагом: `ORIGIN_PROBE_ENABLED=true`.
 
 Запуск
 - Прогон (например, из Jenkins job):
@@ -45,7 +46,7 @@ python -m src.main
 Структура
 ```text
 src/
-  config.py        # Загрузка env, одна переменная FEEDS (CSV)
+  config.py        # Загрузка env, фиды по владельцам (ANTON/ILYA/YURA)
   fetch.py         # HTTP-запросы, извлечение подфидов из feed.xml
   parser.py        # Парсинг XML, извлечение offer'ов
   validator.py     # Проверки по правилам

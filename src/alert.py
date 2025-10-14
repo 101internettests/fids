@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Dict
 
 import pytz
 import requests
@@ -27,9 +27,11 @@ def format_negative(alert: NegativeAlert, timezone: str) -> str:
         'anton': 'Антон',
         'ilya': 'Илья',
         'yura': 'Юра',
-    }.get(alert.owner.lower(), alert.owner)
+        'default': '—',
+    }.get((alert.owner or '').lower(), alert.owner)
+    prefix = f'🔔 Ошибка автотеста фидов (владелец: {owner_title})' if owner_title else '🔔 Ошибка автотеста фидов'
     parts = [
-        f'🔔 Ошибка автотеста фидов (владелец: {owner_title})',
+        prefix,
         '',
         f'⏰ Время: {now_str(timezone)}',
         f'🌍 Фид: {alert.feed_url}',
@@ -58,6 +60,38 @@ def summary_from_json(stats: dict, log_url: Optional[str], timezone: str) -> str
     total_feeds = int(stats.get('total_feeds', 0))
     bad_feeds = int(stats.get('feeds_with_errors', 0))
     return format_summary(total_feeds, bad_feeds, 0, 0, 0, log_url, timezone)
+
+
+def format_grouped_negative(owner: str, feed_url: str, issues_by_offer: Dict[str, List[object]], timezone: str) -> str:
+    # Back-compat: ValidationAlert type alias for ValidationIssue-like objects
+    return _format_grouped(owner, feed_url, issues_by_offer, timezone)
+
+
+def _format_grouped(owner: str, feed_url: str, issues_by_offer: Dict[str, List[object]], timezone: str) -> str:
+    owner_title = {
+        'anton': 'Антон',
+        'ilya': 'Илья',
+        'yura': 'Юра',
+        'default': '—',
+    }.get((owner or '').lower(), owner)
+    header = f'🔔 Ошибка автотеста фидов (владелец: {owner_title})' if owner_title else '🔔 Ошибка автотеста фидов'
+    parts: List[str] = [
+        header,
+        '',
+        f'⏰ Время: {now_str(timezone)}',
+        f'🌍 Фид: {feed_url}',
+        '❌ Найдены проблемы в офферах:',
+    ]
+    for offer_id, issues in issues_by_offer.items():
+        parts.append(f'- Offer ID: {offer_id or "-"}')
+        for issue in issues:
+            msg = getattr(issue, 'message', str(issue))
+            details = getattr(issue, 'details', None)
+            line = f'  - {msg}'
+            if details:
+                line += f' ({details})'
+            parts.append(line)
+    return '\n'.join(parts)
 
 
 def send_telegram(token: Optional[str], chat_id: Optional[str], text: str) -> None:

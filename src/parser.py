@@ -49,3 +49,6 @@ def parse_offers(xml_bytes: bytes) -> List[Offer]:
     return offers
 
 
+
+
+

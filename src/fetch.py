@@ -34,6 +34,12 @@ def is_same_domain(url: str, domain: str) -> bool:
     return other.lower() == domain.lower()
 
 
+def extract_origin(url: str) -> Optional[str]:
+    # returns scheme://host or None
+    m = re.match(r"^(https?://[^/]+)/?", url.strip())
+    return m.group(1) if m else None
+
+
 XML_LINK_RE = re.compile(r"<url>\s*([^<\s]+)\s*</url>", re.IGNORECASE)
 
 
@@ -57,5 +63,6 @@ def iter_all_feed_urls(root_feed_url: str, root_content: bytes) -> Iterable[str]
     if root_feed_url.lower().endswith('feed.xml'):
         for sub in extract_subfeed_links(root_content, root_feed_url):
             yield sub
+
 
 

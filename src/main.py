@@ -7,10 +7,12 @@ from typing import Dict, List, Tuple
 import pytz
 
 from .config import Settings, load_settings
-from .fetch import fetch_url, extract_domain, iter_all_feed_urls
+from .fetch import fetch_url, extract_domain, iter_all_feed_urls, extract_origin
 from .parser import parse_offers
 from .validator import validate_offer, ValidationIssue
 from .alert import NegativeAlert, format_negative, format_summary, send_telegram
+from .alert import format_grouped_negative
+from typing import Dict
 
 
 def ensure_log_dir(path: str) -> Path:
@@ -36,21 +38,26 @@ def log_public_url(settings: Settings, log_path: Path) -> str | None:
     return settings.log_public_base_url.rstrip('/') + '/' + log_path.name
 
 
+def log_info(log_path: Path, message: str) -> None:
+    print(message)
+    append_log(log_path, message)
+
+
 
 def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) -> Tuple[bool, int, int, int]:
     # Returns (has_error, offers_checked)
+    log_info(log_path, f'▶ Проверка фида: {feed_url} (владелец: {owner})')
     res = fetch_url(feed_url, settings.request_timeout_seconds, settings.user_agent)
     if res.error or res.status_code >= 400 or not res.content:
         alert = NegativeAlert(
             owner=owner,
             feed_url=feed_url,
             offer_id='-',
-            message=f'Фид недоступен (status={res.status_code}, error={res.error})',
-            details=None,
+            message='Фид недоступен, поля не проверены',
+            details=f'status={res.status_code}, error={res.error}',
         )
         text = format_negative(alert, settings.timezone)
-        print(text)
-        append_log(log_path, text)
+        log_info(log_path, text)
         if settings.telegram_enabled:
             send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
         return True, 0, 0, 0
@@ -60,33 +67,54 @@ def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) 
     offers_with_errors = 0
     total_issues = 0
 
+    log_info(log_path, f'✅ Фид доступен: status={res.status_code}, bytes={len(res.content or b"")}')
+
     # Iterate over root and subfeeds when root is feed.xml
-    for url in iter_all_feed_urls(feed_url, res.content):
+    urls_to_check = list(iter_all_feed_urls(feed_url, res.content))
+    log_info(log_path, f'🔗 Ссылок для проверки: {len(urls_to_check)}')
+    for url in urls_to_check:
+        log_info(log_path, f'→ Проверка ссылки: {url}')
+        # Quick origin availability check — if site is down, skip noisy offer validations
+        origin = extract_origin(url) or ''
+        if settings.probe_origin_enabled and origin:
+            origin_probe = fetch_url(origin, settings.request_timeout_seconds, settings.user_agent)
+            if origin_probe.error or origin_probe.status_code >= 400:
+                alert = NegativeAlert(owner, url, '-', 'Сайт недоступен, поля не проверены', f'status={origin_probe.status_code}, error={origin_probe.error}')
+                text = format_negative(alert, settings.timezone)
+                log_info(log_path, text)
+                if settings.telegram_enabled:
+                    send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
+                has_error = True
+                continue
+
         sub = fetch_url(url, settings.request_timeout_seconds, settings.user_agent)
         if sub.error or sub.status_code >= 400 or not sub.content:
-            alert = NegativeAlert(owner, url, '-', f'Подфид недоступен (status={sub.status_code}, error={sub.error})', None)
+            alert = NegativeAlert(owner, url, '-', 'Подфид недоступен, поля не проверены', f'status={sub.status_code}, error={sub.error}')
             text = format_negative(alert, settings.timezone)
-            print(text)
-            append_log(log_path, text)
-            send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
+            log_info(log_path, text)
+            if settings.telegram_enabled:
+                send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
             has_error = True
             continue
 
         offers = parse_offers(sub.content)
         offers_checked += len(offers)
+        log_info(log_path, f'📦 Найдено офферов: {len(offers)}')
+        grouped: Dict[str, List[ValidationIssue]] = {}
         for offer in offers:
             issues: List[ValidationIssue] = validate_offer(offer.fields, url)
             if issues:
                 offers_with_errors += 1
                 total_issues += len(issues)
-            for issue in issues:
-                alert = NegativeAlert(owner, url, offer.id or '-', issue.message, issue.details)
-                text = format_negative(alert, settings.timezone)
-                print(text)
-                append_log(log_path, text)
-                if settings.telegram_enabled:
-                    send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
-                has_error = True
+                grouped.setdefault(offer.id or '-', []).extend(issues)
+        if grouped:
+            text = format_grouped_negative(owner, url, grouped, settings.timezone)
+            log_info(log_path, text)
+            if settings.telegram_enabled:
+                send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
+            has_error = True
+        else:
+            log_info(log_path, '✓ Ошибок не найдено для этой ссылки')
 
     return has_error, offers_checked, offers_with_errors, total_issues
 

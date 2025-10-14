@@ -86,3 +86,6 @@ def validate_offer(
     return issues
 
 
+
+
+
