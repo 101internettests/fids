@@ -146,7 +146,8 @@ def main() -> None:
     log_path = today_log_file(settings.log_dir, settings.timezone)
     # Режим суточного отчёта из JSON (для cron 09:00/17:00): python src/main.py --daily-summary
     if len(sys.argv) > 1 and sys.argv[1] in ('--daily-summary', '--send-daily', '--summary'):
-        stats_path = stats_json_path(settings, ensure_log_dir(settings.log_dir))
+        stats_dir = ensure_log_dir(settings.log_dir)
+        stats_path = stats_json_path(settings, stats_dir)
         stats = {
             'total_feeds': 0,
             'feeds_with_errors': 0,
@@ -154,12 +155,17 @@ def main() -> None:
             'offers_with_errors': 0,
             'total_issues': 0,
         }
-        try:
-            if stats_path.exists():
-                with stats_path.open('r', encoding='utf-8') as f:
-                    stats.update(json.load(f) or {})
-        except Exception:
-            pass
+        # Пытаемся прочитать из основного пути, иначе резервно из корня репо (fids_stat.json)
+        for candidate in (stats_path, Path('fids_stat.json')):
+            try:
+                if candidate.exists():
+                    with candidate.open('r', encoding='utf-8') as f:
+                        data = json.load(f) or {}
+                        if isinstance(data, dict):
+                            stats.update(data)
+                            break
+            except Exception:
+                continue
         text = format_summary(
             int(stats.get('total_feeds', 0)),
             int(stats.get('feeds_with_errors', 0)),

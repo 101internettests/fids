@@ -47,14 +47,19 @@ def format_negative(alert: NegativeAlert, timezone: str) -> str:
 
 
 def format_summary(total_feeds: int, bad_feeds: int, total_offers: int, bad_offers: int, total_issues: int, log_url: Optional[str], timezone: str) -> str:
-    # Формат как в примере пользователя
+    # Формат суточного отчёта со всеми основными метриками
     parts = [
         '✅ Общий отчет по проверке фидов',
         '',
         f'⏰ Время: {now_str(timezone)}',
         f'🌍 Проверено фидов: {total_feeds}',
         f'❌ Фидов с ошибками: {bad_feeds}',
+        f'📦 Всего офферов: {total_offers}',
+        f'⚠️ Офферов с ошибками: {bad_offers}',
+        f'🧩 Всего ошибок: {total_issues}',
     ]
+    if log_url:
+        parts.append(f'📄 Лог: {log_url}')
     return '\n'.join(parts)
 
 
