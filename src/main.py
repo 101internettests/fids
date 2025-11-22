@@ -15,14 +15,14 @@ try:
     from .parser import parse_offers
     from .validator import validate_offer, ValidationIssue
     from .alert import NegativeAlert, format_negative, format_summary, send_telegram
-    from .alert import format_grouped_negative
+    from .alert import format_grouped_negative, summary_from_json
 except Exception:  # noqa: BLE001
     from config import Settings, load_settings  # type: ignore
     from fetch import fetch_url, extract_domain, iter_all_feed_urls, extract_origin, explain_fetch_problem  # type: ignore
     from parser import parse_offers  # type: ignore
     from validator import validate_offer, ValidationIssue  # type: ignore
     from alert import NegativeAlert, format_negative, format_summary, send_telegram  # type: ignore
-    from alert import format_grouped_negative  # type: ignore
+    from alert import format_grouped_negative, summary_from_json  # type: ignore
 from typing import Dict
 
 
@@ -166,15 +166,8 @@ def main() -> None:
                             break
             except Exception:
                 continue
-        text = format_summary(
-            int(stats.get('total_feeds', 0)),
-            int(stats.get('feeds_with_errors', 0)),
-            int(stats.get('total_offers', 0)),
-            int(stats.get('offers_with_errors', 0)),
-            int(stats.get('total_issues', 0)),
-            log_public_url(settings, log_path),
-            settings.timezone,
-        )
+        # Формируем суточный отчёт по готовым данным
+        text = summary_from_json(stats, log_public_url(settings, log_path), settings.timezone)
         print(text)
         append_log(log_path, text)
         if settings.telegram_enabled and settings.telegram_enabled_success:

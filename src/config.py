@@ -2,7 +2,8 @@ import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
+from pathlib import Path
 
 
 @dataclass
@@ -35,7 +36,12 @@ def _split_csv(value: Optional[str]) -> List[str]:
 
 
 def load_settings() -> Settings:
-    load_dotenv()
+    # Надёжно подхватываем .env из корня репозитория, даже если current working directory другой
+    env_path = find_dotenv(usecwd=True)
+    if env_path:
+        load_dotenv(env_path)
+    else:
+        load_dotenv()
 
     owners: Dict[str, OwnerFeeds] = {}
     # Support grouped owners via env and also a single FEEDS list
@@ -61,6 +67,10 @@ def load_settings() -> Settings:
     telegram_enabled = (os.getenv('TELEGRAM_ENABLED', 'true').lower() in ['1', 'true', 'yes', 'y', 'on'])
     telegram_enabled_success = (os.getenv('TELEGRAM_ENABLED_SU', 'true').lower() in ['1', 'true', 'yes', 'y', 'on'])
     fids_stat_path = os.getenv('FIDS_STAT_PATH')
+    # Если путь относительный — интерпретируем его относительно корня репозитория (родителя src)
+    if fids_stat_path and not os.path.isabs(fids_stat_path):
+        repo_root = Path(__file__).resolve().parent.parent
+        fids_stat_path = str((repo_root / fids_stat_path).resolve())
     probe_origin_enabled = (os.getenv('ORIGIN_PROBE_ENABLED', 'false').lower() in ['1', 'true', 'yes', 'y', 'on'])
     allow_subdomains = (os.getenv('ALLOW_SUBDOMAINS', 'false').lower() in ['1', 'true', 'yes', 'y', 'on'])
 
