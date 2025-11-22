@@ -6,12 +6,21 @@ from typing import Dict, List, Tuple
 
 import pytz
 
-from .config import Settings, load_settings
-from .fetch import fetch_url, extract_domain, iter_all_feed_urls, extract_origin, explain_fetch_problem
-from .parser import parse_offers
-from .validator import validate_offer, ValidationIssue
-from .alert import NegativeAlert, format_negative, format_summary, send_telegram
-from .alert import format_grouped_negative
+# Импорты работают и в режиме пакета (python -m src.main), и при запуске как скрипт (python src/main.py)
+try:
+    from .config import Settings, load_settings
+    from .fetch import fetch_url, extract_domain, iter_all_feed_urls, extract_origin, explain_fetch_problem
+    from .parser import parse_offers
+    from .validator import validate_offer, ValidationIssue
+    from .alert import NegativeAlert, format_negative, format_summary, send_telegram
+    from .alert import format_grouped_negative
+except Exception:  # noqa: BLE001
+    from config import Settings, load_settings  # type: ignore
+    from fetch import fetch_url, extract_domain, iter_all_feed_urls, extract_origin, explain_fetch_problem  # type: ignore
+    from parser import parse_offers  # type: ignore
+    from validator import validate_offer, ValidationIssue  # type: ignore
+    from alert import NegativeAlert, format_negative, format_summary, send_telegram  # type: ignore
+    from alert import format_grouped_negative  # type: ignore
 from typing import Dict
 
 

@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from .fetch import extract_domain, is_same_domain
+try:
+    from .fetch import extract_domain, is_same_domain
+except Exception:  # noqa: BLE001
+    from fetch import extract_domain, is_same_domain  # type: ignore
 import re
 
 
@@ -43,7 +46,10 @@ def validate_offer(
     offer_fields: Dict[str, List[str]],
     feed_url: str,
 ) -> List[ValidationIssue]:
-    from .config import load_settings
+    try:
+        from .config import load_settings  # type: ignore
+    except Exception:  # noqa: BLE001
+        from config import load_settings  # type: ignore
     settings = load_settings()
     domain = extract_domain(feed_url) or ''
     issues: List[ValidationIssue] = []
