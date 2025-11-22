@@ -62,7 +62,10 @@ def summary_from_json(stats: dict, log_url: Optional[str], timezone: str) -> str
     # Используется твоим джобом в 09:00/17:00: читает stats JSON и формирует текст
     total_feeds = int(stats.get('total_feeds', 0))
     bad_feeds = int(stats.get('feeds_with_errors', 0))
-    return format_summary(total_feeds, bad_feeds, 0, 0, 0, log_url, timezone)
+    total_offers = int(stats.get('total_offers', 0))
+    bad_offers = int(stats.get('offers_with_errors', 0))
+    total_issues = int(stats.get('total_issues', 0))
+    return format_summary(total_feeds, bad_feeds, total_offers, bad_offers, total_issues, log_url, timezone)
 
 
 def format_grouped_negative(owner: str, feed_url: str, issues_by_offer: Dict[str, List[object]], timezone: str) -> str:

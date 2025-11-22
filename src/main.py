@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import pytz
+import sys
+import json
 
 # Импорты работают и в режиме пакета (python -m src.main), и при запуске как скрипт (python src/main.py)
 try:
@@ -45,6 +47,13 @@ def log_public_url(settings: Settings, log_path: Path) -> str | None:
     if not settings.log_public_base_url:
         return None
     return settings.log_public_base_url.rstrip('/') + '/' + log_path.name
+
+def stats_json_path(settings: Settings, log_dir_path: Path) -> Path:
+    # Определяем путь к JSON: если указан FIDS_STAT_PATH и это директория – храним в <dir>/fids_stat.json
+    if getattr(settings, 'fids_stat_path', None):
+        base = Path(settings.fids_stat_path)
+        return base if base.suffix.lower() == '.json' else (base / 'fids_stat.json')
+    return log_dir_path / 'fids_stat.json'
 
 
 def log_info(log_path: Path, message: str) -> None:
@@ -135,6 +144,37 @@ def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) 
 def main() -> None:
     settings = load_settings()
     log_path = today_log_file(settings.log_dir, settings.timezone)
+    # Режим суточного отчёта из JSON (для cron 09:00/17:00): python src/main.py --daily-summary
+    if len(sys.argv) > 1 and sys.argv[1] in ('--daily-summary', '--send-daily', '--summary'):
+        stats_path = stats_json_path(settings, ensure_log_dir(settings.log_dir))
+        stats = {
+            'total_feeds': 0,
+            'feeds_with_errors': 0,
+            'total_offers': 0,
+            'offers_with_errors': 0,
+            'total_issues': 0,
+        }
+        try:
+            if stats_path.exists():
+                with stats_path.open('r', encoding='utf-8') as f:
+                    stats.update(json.load(f) or {})
+        except Exception:
+            pass
+        text = format_summary(
+            int(stats.get('total_feeds', 0)),
+            int(stats.get('feeds_with_errors', 0)),
+            int(stats.get('total_offers', 0)),
+            int(stats.get('offers_with_errors', 0)),
+            int(stats.get('total_issues', 0)),
+            log_public_url(settings, log_path),
+            settings.timezone,
+        )
+        print(text)
+        append_log(log_path, text)
+        if settings.telegram_enabled and settings.telegram_enabled_success:
+            send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
+        return
+
     total_feeds = 0
     feeds_with_errors = 0
     total_offers = 0
@@ -152,14 +192,7 @@ def main() -> None:
                 feeds_with_errors += 1
     
     # Обновляем суточную статистику в JSON (fids_stat)
-    from json import load as json_load, dump as json_dump
-
-    # Определяем путь к JSON: если указан FIDS_STAT_PATH и это директория – храним в <dir>/fids_stat.json
-    if getattr(settings, 'fids_stat_path', None):
-        base = Path(settings.fids_stat_path)
-        stats_path = base if base.suffix.lower() == '.json' else (base / 'fids_stat.json')
-    else:
-        stats_path = ensure_log_dir(settings.log_dir) / 'fids_stat.json'
+    stats_path = stats_json_path(settings, ensure_log_dir(settings.log_dir))
 
     today = pytz.timezone(settings.timezone).localize(dt.datetime.now()).strftime('%Y-%m-%d')
     stats = {
@@ -173,7 +206,7 @@ def main() -> None:
     try:
         if stats_path.exists():
             with stats_path.open('r', encoding='utf-8') as f:
-                prev = json_load(f)
+                prev = json.load(f)
             if prev.get('date') == today:
                 stats.update({k: int(prev.get(k, 0)) for k in stats.keys() if k != 'date'})
     except Exception:
@@ -187,7 +220,7 @@ def main() -> None:
 
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     with stats_path.open('w', encoding='utf-8') as f:
-        json_dump(stats, f, ensure_ascii=False)
+        json.dump(stats, f, ensure_ascii=False)
 
     # Отправляем позитивное сообщение по итогам текущего прогона
     run_text = format_summary(
