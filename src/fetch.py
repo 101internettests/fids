@@ -98,4 +98,50 @@ def iter_all_feed_urls(root_feed_url: str, root_content: bytes) -> Iterable[str]
             yield sub
 
 
+def explain_fetch_problem(url: str, status_code: int, error: Optional[str]) -> Optional[str]:
+    """
+    Возвращает краткое русскоязычное пояснение для менеджеров, почему ссылка могла не открыться.
+    На основании HTTP-статуса и текста исключения из requests.
+    """
+    err = (error or '').lower()
+    # HTTP статусы
+    if status_code >= 500:
+        return 'Ошибка на стороне сайта (HTTP 5xx). Нужно починить сервер.'
+    if status_code == 404:
+        return 'Страница фида не найдена (HTTP 404). Проверьте URL.'
+    if status_code == 403:
+        return 'Доступ к фиду запрещён (HTTP 403). Возможны ограничения по IP или User‑Agent.'
+    if status_code == 401:
+        return 'Требуется авторизация (HTTP 401). Нужны креды или белый список.'
+    if status_code == 429:
+        return 'Сайт ограничил частоту запросов (HTTP 429). Слишком много обращений.'
+    if status_code >= 400:
+        return f'Клиентская ошибка (HTTP {status_code}). Проверьте доступность и корректность URL.'
+    # Ошибки сетевого уровня и SSL
+    if 'wrong version number' in err:
+        return 'Неверная настройка HTTPS на стороне сайта (возможен HTTP на 443 порту или прокси).'
+    if 'certificate verify failed' in err or 'ssl: certificate' in err or 'hostname' in err:
+        return 'Проблема с SSL‑сертификатом сайта (просрочен, неверное имя, самоподписанный).'
+    if 'ssLError'.lower() in err:
+        return 'Ошибка SSL. Проверьте сертификат и протоколы на сервере.'
+    if 'read timed out' in err or 'timeout' in err and 'connect' not in err:
+        return 'Сайт долго отвечает (таймаут чтения).'
+    if 'connect timeout' in err or ('timeout' in err and 'connect' in err):
+        return 'Не удалось подключиться к сайту (таймаут подключения).'
+    if 'failed to establish a new connection' in err or 'newconnectionerror' in err:
+        return 'Не удалось установить соединение. Сайт недоступен или блокирует подключения.'
+    if 'temporary failure in name resolution' in err or 'name or service not known' in err or 'nodename nor servname provided' in err:
+        return 'DNS‑имя сайта не разрешается. Проверьте домен.'
+    if 'remote disconnected' in err or 'connection reset by peer' in err:
+        return 'Сервер разорвал соединение.'
+    if 'too many redirects' in err:
+        return 'Слишком много перенаправлений. Проверьте корректность URL.'
+    if 'proxy' in err:
+        return 'Ошибка прокси‑сервера по пути к сайту.'
+    # Статус 0 без явной ошибки
+    if status_code == 0 and not err:
+        return 'Неизвестная сетевая ошибка. Сайт мог быть временно недоступен.'
+    return None
+
+
 

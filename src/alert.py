@@ -15,6 +15,7 @@ class NegativeAlert:
     offer_id: str
     message: str
     details: Optional[str]
+    hint: Optional[str] = None
 
 
 def now_str(timezone: str) -> str:
@@ -40,6 +41,8 @@ def format_negative(alert: NegativeAlert, timezone: str) -> str:
     ]
     if alert.details:
         parts.append(f'🔍 Детали: {alert.details}')
+    if getattr(alert, 'hint', None):
+        parts.append(f'📝 Возможная причина: {alert.hint}')
     return '\n'.join(parts)
 
 

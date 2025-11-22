@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple
 import pytz
 
 from .config import Settings, load_settings
-from .fetch import fetch_url, extract_domain, iter_all_feed_urls, extract_origin
+from .fetch import fetch_url, extract_domain, iter_all_feed_urls, extract_origin, explain_fetch_problem
 from .parser import parse_offers
 from .validator import validate_offer, ValidationIssue
 from .alert import NegativeAlert, format_negative, format_summary, send_telegram
@@ -49,12 +49,14 @@ def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) 
     log_info(log_path, f'▶ Проверка фида: {feed_url} (владелец: {owner})')
     res = fetch_url(feed_url, settings.request_timeout_seconds, settings.user_agent)
     if res.error or res.status_code >= 400 or not res.content:
+        hint = explain_fetch_problem(feed_url, res.status_code, res.error)
         alert = NegativeAlert(
             owner=owner,
             feed_url=feed_url,
             offer_id='-',
             message='Фид недоступен, поля не проверены',
             details=f'status={res.status_code}, error={res.error}',
+            hint=hint,
         )
         text = format_negative(alert, settings.timezone)
         log_info(log_path, text)
@@ -79,7 +81,8 @@ def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) 
         if settings.probe_origin_enabled and origin:
             origin_probe = fetch_url(origin, settings.request_timeout_seconds, settings.user_agent)
             if origin_probe.error or origin_probe.status_code >= 400:
-                alert = NegativeAlert(owner, url, '-', 'Сайт недоступен, поля не проверены', f'status={origin_probe.status_code}, error={origin_probe.error}')
+                hint = explain_fetch_problem(origin, origin_probe.status_code, origin_probe.error)
+                alert = NegativeAlert(owner, url, '-', 'Сайт недоступен, поля не проверены', f'status={origin_probe.status_code}, error={origin_probe.error}', hint)
                 text = format_negative(alert, settings.timezone)
                 log_info(log_path, text)
                 if settings.telegram_enabled:
@@ -89,7 +92,8 @@ def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) 
 
         sub = fetch_url(url, settings.request_timeout_seconds, settings.user_agent)
         if sub.error or sub.status_code >= 400 or not sub.content:
-            alert = NegativeAlert(owner, url, '-', 'Подфид недоступен, поля не проверены', f'status={sub.status_code}, error={sub.error}')
+            hint = explain_fetch_problem(url, sub.status_code, sub.error)
+            alert = NegativeAlert(owner, url, '-', 'Подфид недоступен, поля не проверены', f'status={sub.status_code}, error={sub.error}', hint)
             text = format_negative(alert, settings.timezone)
             log_info(log_path, text)
             if settings.telegram_enabled:
