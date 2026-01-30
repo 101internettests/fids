@@ -122,3 +122,20 @@ def send_telegram(token: Optional[str], chat_id: Optional[str], text: str) -> No
         pass
 
 
+def format_recovery(owner: str, feed_url: str, timezone: str) -> str:
+    owner_title = {
+        'anton': 'Антон',
+        'ilya': 'Илья',
+        'yura': 'Юра',
+        'default': '—',
+    }.get((owner or '').lower(), owner)
+    header = f'✅ Фид восстановился (владелец: {owner_title})' if owner_title else '✅ Фид восстановился'
+    parts = [
+        header,
+        '',
+        f'⏰ Время: {now_str(timezone)}',
+        f'🌍 Фид: {feed_url}',
+        '✓ Ошибок не обнаружено в текущем прогоне',
+    ]
+    return '\n'.join(parts)
+

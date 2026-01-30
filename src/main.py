@@ -16,6 +16,7 @@ try:
     from .validator import validate_offer, ValidationIssue
     from .alert import NegativeAlert, format_negative, format_summary, send_telegram
     from .alert import format_grouped_negative, summary_from_json
+    from .alert import format_recovery
 except Exception:  # noqa: BLE001
     from config import Settings, load_settings  # type: ignore
     from fetch import fetch_url, extract_domain, iter_all_feed_urls, extract_origin, explain_fetch_problem  # type: ignore
@@ -23,6 +24,7 @@ except Exception:  # noqa: BLE001
     from validator import validate_offer, ValidationIssue  # type: ignore
     from alert import NegativeAlert, format_negative, format_summary, send_telegram  # type: ignore
     from alert import format_grouped_negative, summary_from_json  # type: ignore
+    from alert import format_recovery  # type: ignore
 from typing import Dict
 
 
@@ -54,6 +56,10 @@ def stats_json_path(settings: Settings, log_dir_path: Path) -> Path:
         base = Path(settings.fids_stat_path)
         return base if base.suffix.lower() == '.json' else (base / 'fids_stat.json')
     return log_dir_path / 'fids_stat.json'
+
+def feed_state_json_path(log_dir_path: Path) -> Path:
+    # Хранение последних статусов фидов (ok/error) рядом с логами
+    return log_dir_path / 'feed_state.json'
 
 
 def log_info(log_path: Path, message: str) -> None:
@@ -144,10 +150,22 @@ def process_feed(settings: Settings, owner: str, feed_url: str, log_path: Path) 
 def main() -> None:
     settings = load_settings()
     log_path = today_log_file(settings.log_dir, settings.timezone)
+    log_dir_path = ensure_log_dir(settings.log_dir)
+    # Загружаем состояния фидов (для оповещений о восстановлении)
+    feed_state_path = feed_state_json_path(log_dir_path)
+    feed_state: Dict[str, str] = {}
+    try:
+        if feed_state_path.exists():
+            with feed_state_path.open('r', encoding='utf-8') as f:
+                data = json.load(f) or {}
+                if isinstance(data, dict):
+                    feed_state = {str(k): str(v) for k, v in data.items()}
+    except Exception:
+        # игнорируем ошибки чтения состояния
+        feed_state = {}
     # Режим суточного отчёта из JSON (для cron 09:00/17:00): python src/main.py --daily-summary
     if len(sys.argv) > 1 and sys.argv[1] in ('--daily-summary', '--send-daily', '--summary'):
-        stats_dir = ensure_log_dir(settings.log_dir)
-        stats_path = stats_json_path(settings, stats_dir)
+        stats_path = stats_json_path(settings, log_dir_path)
         stats = {
             'total_feeds': 0,
             'feeds_with_errors': 0,
@@ -189,9 +207,20 @@ def main() -> None:
             total_issues += issues_cnt
             if has_error:
                 feeds_with_errors += 1
+            # Определяем текущее и предыдущее состояние фида
+            new_state = 'error' if has_error else 'ok'
+            prev_state = feed_state.get(feed_url)
+            # Отправляем уведомление о восстановлении при переходе ERROR -> OK
+            if prev_state == 'error' and new_state == 'ok':
+                text = format_recovery(owner_key, feed_url, settings.timezone)
+                log_info(log_path, text)
+                if settings.telegram_enabled:
+                    send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
+            # Обновляем состояние
+            feed_state[feed_url] = new_state
     
     # Обновляем суточную статистику в JSON (fids_stat)
-    stats_path = stats_json_path(settings, ensure_log_dir(settings.log_dir))
+    stats_path = stats_json_path(settings, log_dir_path)
 
     today = pytz.timezone(settings.timezone).localize(dt.datetime.now()).strftime('%Y-%m-%d')
     stats = {
@@ -220,6 +249,14 @@ def main() -> None:
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     with stats_path.open('w', encoding='utf-8') as f:
         json.dump(stats, f, ensure_ascii=False)
+
+    # Сохраняем состояния фидов
+    try:
+        feed_state_path.parent.mkdir(parents=True, exist_ok=True)
+        with feed_state_path.open('w', encoding='utf-8') as f:
+            json.dump(feed_state, f, ensure_ascii=False)
+    except Exception:
+        pass
 
     # Отправляем позитивное сообщение по итогам текущего прогона
     run_text = format_summary(
