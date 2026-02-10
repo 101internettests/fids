@@ -138,4 +138,3 @@ def format_recovery(owner: str, feed_url: str, timezone: str) -> str:
         '✓ Ошибок не обнаружено в текущем прогоне',
     ]
     return '\n'.join(parts)
-

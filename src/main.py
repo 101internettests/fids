@@ -57,13 +57,41 @@ def stats_json_path(settings: Settings, log_dir_path: Path) -> Path:
         return base if base.suffix.lower() == '.json' else (base / 'fids_stat.json')
     return log_dir_path / 'fids_stat.json'
 
-def feed_state_json_path(log_dir_path: Path) -> Path:
-    # Хранение последних статусов фидов (ok/error) рядом с логами
+def feed_state_json_path(settings: Settings, log_dir_path: Path) -> Path:
+    """
+    Хранение последних статусов фидов (ok/error) для оповещений о восстановлении.
+    По умолчанию лежит рядом с логами, но если задан FIDS_STAT_PATH — кладём в ту же папку,
+    чтобы файл гарантированно переживал перезапуски джоба.
+    """
+    if getattr(settings, 'fids_stat_path', None):
+        base = Path(settings.fids_stat_path)
+        state_dir = base.parent if base.suffix.lower() == '.json' else base
+        return state_dir / 'feed_state.json'
     return log_dir_path / 'feed_state.json'
 
 
+def save_feed_state(feed_state_path: Path, feed_state: Dict[str, str]) -> None:
+    # Best-effort: состояние нужно для recovery, не должно валить прогон
+    try:
+        feed_state_path.parent.mkdir(parents=True, exist_ok=True)
+        with feed_state_path.open('w', encoding='utf-8') as f:
+            json.dump(feed_state, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
 def log_info(log_path: Path, message: str) -> None:
-    print(message)
+    # На Windows консоль часто cp1251 и падает на emoji/символах.
+    # Логи пишем всегда в UTF-8, а в консоль печатаем best-effort без падения прогона.
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        try:
+            sys.stdout.buffer.write((message + '\n').encode('utf-8', errors='replace'))
+            sys.stdout.flush()
+        except Exception:
+            # last resort: не падаем
+            print(message.encode('ascii', errors='backslashreplace').decode('ascii'))
     append_log(log_path, message)
 
 
@@ -152,7 +180,7 @@ def main() -> None:
     log_path = today_log_file(settings.log_dir, settings.timezone)
     log_dir_path = ensure_log_dir(settings.log_dir)
     # Загружаем состояния фидов (для оповещений о восстановлении)
-    feed_state_path = feed_state_json_path(log_dir_path)
+    feed_state_path = feed_state_json_path(settings, log_dir_path)
     feed_state: Dict[str, str] = {}
     try:
         if feed_state_path.exists():
@@ -218,6 +246,8 @@ def main() -> None:
                     send_telegram(settings.telegram_bot_token, settings.telegram_chat_id, text)
             # Обновляем состояние
             feed_state[feed_url] = new_state
+            # Сохраняем сразу после каждого фида, чтобы recovery не терялся при падениях позже по прогону
+            save_feed_state(feed_state_path, feed_state)
     
     # Обновляем суточную статистику в JSON (fids_stat)
     stats_path = stats_json_path(settings, log_dir_path)
@@ -250,13 +280,8 @@ def main() -> None:
     with stats_path.open('w', encoding='utf-8') as f:
         json.dump(stats, f, ensure_ascii=False)
 
-    # Сохраняем состояния фидов
-    try:
-        feed_state_path.parent.mkdir(parents=True, exist_ok=True)
-        with feed_state_path.open('w', encoding='utf-8') as f:
-            json.dump(feed_state, f, ensure_ascii=False)
-    except Exception:
-        pass
+    # Финальная запись состояний (на всякий случай)
+    save_feed_state(feed_state_path, feed_state)
 
     # Отправляем позитивное сообщение по итогам текущего прогона
     run_text = format_summary(
