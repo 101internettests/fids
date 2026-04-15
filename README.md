@@ -21,6 +21,12 @@ python -m venv .venv
 Настройка
 1) Создайте `.env` на основе `.env.example` и заполните переменные владельцев: `ANTON_FEEDS`, `ILYA_FEEDS`, `YURA_FEEDS` — каждая это CSV‑список фидов данного владельца.
 2) При желании укажите `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID`. Отключить отправку в Telegram можно через `TELEGRAM_ENABLED=false`. Отдельно можно отключить отправку успешных сообщений (`fids_stat` за запуск) через `TELEGRAM_ENABLED_SU=false`. При необходимости укажите путь для хранения суточной статистики: `FIDS_STAT_PATH`.
+   Для отправки через proxy:
+   - `USE_TELEGRAM_PROXY=true`
+   - `TELEGRAM_PROXY_URL`
+   - `TELEGRAM_PROXY_AUTH_SECRET`
+   - `TELEGRAM_PROXY_CREDS`
+   - `TELEGRAM_PROXY_TIMEOUT_SEC` (опционально, по умолчанию `15`)
 3) Для ускорения старта можно отключить проверку доступности домена (по умолчанию выключена). Включить можно флагом: `ORIGIN_PROBE_ENABLED=true`.
 4) Доменная проверка:
    - Нормализация www: `www.example.com` ≡ `example.com`
@@ -62,3 +68,4 @@ src/
 Логи
 - Файлы: `logs/YYYY-MM-DD-feed-test.log`.
 - Если задан `LOG_PUBLIC_BASE_URL`, ссылки в резюме будут указывать на хост с логами.
+
