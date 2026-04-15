@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import datetime as dt
+import html
+import os
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Dict
 
 import pytz
 import requests
+
+
+_PROXY_MISSING_ENV_LOGGED = False
 
 
 @dataclass
@@ -105,7 +110,98 @@ def _format_grouped(owner: str, feed_url: str, issues_by_offer: Dict[str, List[o
     return '\n'.join(parts)
 
 
-def send_telegram(token: Optional[str], chat_id: Optional[str], text: str) -> None:
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ('1', 'true', 'yes', 'y', 'on')
+
+
+def _get_proxy_env(
+    telegram_proxy_url: Optional[str] = None,
+    telegram_proxy_auth_secret: Optional[str] = None,
+    telegram_proxy_creds: Optional[str] = None,
+) -> Optional[tuple[str, str, str]]:
+    global _PROXY_MISSING_ENV_LOGGED
+
+    proxy_url = (telegram_proxy_url or os.getenv('TELEGRAM_PROXY_URL') or '').strip()
+    auth_secret = (telegram_proxy_auth_secret or os.getenv('TELEGRAM_PROXY_AUTH_SECRET') or '').strip()
+    creds = (telegram_proxy_creds or os.getenv('TELEGRAM_PROXY_CREDS') or '').strip()
+
+    missing = []
+    if not proxy_url:
+        missing.append('TELEGRAM_PROXY_URL')
+    if not auth_secret:
+        missing.append('TELEGRAM_PROXY_AUTH_SECRET')
+    if not creds:
+        missing.append('TELEGRAM_PROXY_CREDS')
+
+    if missing:
+        if not _PROXY_MISSING_ENV_LOGGED:
+            print(f"[telegram][proxy] Missing required env vars: {', '.join(missing)}")
+            _PROXY_MISSING_ENV_LOGGED = True
+        return None
+
+    return proxy_url, auth_secret, creds
+
+
+def send_telegram(
+    token: Optional[str],
+    chat_id: Optional[str],
+    text: str,
+    *,
+    use_telegram_proxy: Optional[bool] = None,
+    telegram_proxy_url: Optional[str] = None,
+    telegram_proxy_auth_secret: Optional[str] = None,
+    telegram_proxy_creds: Optional[str] = None,
+    telegram_proxy_timeout_sec: Optional[float] = None,
+) -> None:
+    use_proxy = _env_bool('USE_TELEGRAM_PROXY', False) if use_telegram_proxy is None else bool(use_telegram_proxy)
+    if telegram_proxy_timeout_sec is None:
+        try:
+            timeout = float(os.getenv('TELEGRAM_PROXY_TIMEOUT_SEC', '15'))
+        except Exception:
+            timeout = 15.0
+    else:
+        timeout = float(telegram_proxy_timeout_sec)
+
+    if use_proxy:
+        proxy_env = _get_proxy_env(
+            telegram_proxy_url=telegram_proxy_url,
+            telegram_proxy_auth_secret=telegram_proxy_auth_secret,
+            telegram_proxy_creds=telegram_proxy_creds,
+        )
+        if not proxy_env:
+            return
+        proxy_url, auth_secret, creds = proxy_env
+        try:
+            resp = requests.post(
+                proxy_url,
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-Authentication': auth_secret,
+                },
+                json={
+                    'title': html.escape('Runtime alert'),
+                    'text': html.escape(text),
+                    'creds': creds,
+                    'parse_mode': 'HTML',
+                    'disable_notification': False,
+                },
+                timeout=timeout,
+            )
+            if getattr(resp, 'status_code', 200) >= 400:
+                print(f'[telegram][proxy] send failed: {resp.status_code} {getattr(resp, "text", "")[:180]}')
+            return
+        except requests.Timeout:
+            print(f'[telegram][proxy] timeout after {timeout}s')
+            return
+        except requests.RequestException as exc:
+            print(f'[telegram][proxy] transport error: {exc}')
+            return
+        except Exception:
+            return
+
     if not token or not chat_id:
         return
     try:
