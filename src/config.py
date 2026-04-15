@@ -24,6 +24,11 @@ class Settings:
     telegram_chat_id: Optional[str]
     telegram_enabled: bool
     telegram_enabled_success: bool
+    use_telegram_proxy: bool
+    telegram_proxy_url: Optional[str]
+    telegram_proxy_auth_secret: Optional[str]
+    telegram_proxy_creds: Optional[str]
+    telegram_proxy_timeout_sec: float
     fids_stat_path: Optional[str]
     probe_origin_enabled: bool
     allow_subdomains: bool
@@ -66,6 +71,14 @@ def load_settings() -> Settings:
     tg_chat = os.getenv('TELEGRAM_CHAT_ID') or os.getenv('CHAT_ID')
     telegram_enabled = (os.getenv('TELEGRAM_ENABLED', 'true').lower() in ['1', 'true', 'yes', 'y', 'on'])
     telegram_enabled_success = (os.getenv('TELEGRAM_ENABLED_SU', 'true').lower() in ['1', 'true', 'yes', 'y', 'on'])
+    use_telegram_proxy = (os.getenv('USE_TELEGRAM_PROXY', 'false').lower() in ['1', 'true', 'yes', 'y', 'on'])
+    telegram_proxy_url = (os.getenv('TELEGRAM_PROXY_URL') or '').strip() or None
+    telegram_proxy_auth_secret = (os.getenv('TELEGRAM_PROXY_AUTH_SECRET') or '').strip() or None
+    telegram_proxy_creds = (os.getenv('TELEGRAM_PROXY_CREDS') or '').strip() or None
+    try:
+        telegram_proxy_timeout_sec = float(os.getenv('TELEGRAM_PROXY_TIMEOUT_SEC', '15'))
+    except Exception:
+        telegram_proxy_timeout_sec = 15.0
     fids_stat_path = os.getenv('FIDS_STAT_PATH')
     # Если путь относительный — интерпретируем его относительно корня репозитория (родителя src)
     if fids_stat_path and not os.path.isabs(fids_stat_path):
@@ -85,9 +98,13 @@ def load_settings() -> Settings:
         telegram_chat_id=tg_chat,
         telegram_enabled=telegram_enabled,
         telegram_enabled_success=telegram_enabled_success,
+        use_telegram_proxy=use_telegram_proxy,
+        telegram_proxy_url=telegram_proxy_url,
+        telegram_proxy_auth_secret=telegram_proxy_auth_secret,
+        telegram_proxy_creds=telegram_proxy_creds,
+        telegram_proxy_timeout_sec=telegram_proxy_timeout_sec,
         fids_stat_path=fids_stat_path,
         probe_origin_enabled=probe_origin_enabled,
         allow_subdomains=allow_subdomains,
     )
-
 
